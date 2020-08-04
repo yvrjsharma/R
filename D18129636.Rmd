@@ -1,0 +1,840 @@
+---
+title: "R Notebook for Probability and statistical Inference CA Part I"
+output: html_notebook
+author: Student number = D18129636, Name = Yuvraj Sharma, Programme code = TU059
+---
+
+# Abstract
+
+In building a General Linear Statistical Model, we first need to understand and define accurately what is happening inside the data. This report is written to find exactly that. It finds out if there are evidences of relationships in the data and it uses appropriate tests and makes decisions based on their results. A relationship is found to have strength and a direction associated with it. This report further identifies if there are any differential effects for different groups.  
+This report will explore two relationships, one between number of absences and final maths grades, other one between maths grades in period one and final maths grades.  
+It will also check for differential effects of gender on number of absences, mother's job on a student's final maths grades.  
+Lastly, it will explore if maths grades in period one and two are similar or not.  
+
+In order to find out the relationships and differences, this report conducts statistical analysis on the given dataset. The dataset is taken from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/student+performance). For description of the variables present in this dataset, one can also refer this  [paper](https://repositorium.sdum.uminho.pt/bitstream/1822/8024/1/student.pdf).
+
+
+```{r setup}
+#Code chunk for setup
+#Install following R libraries if needed, before loading them here 
+#Example - install.packages("userfriendlyscience")
+#Importing libraries 
+library(pastecs) #For creating descriptive statistic summaries
+library(dplyr) #For working on dataframe like objects 
+library(ggplot2) #For creating histograms with more detail than plot
+library(psych) # Some useful descriptive functions
+library(semTools) #For skewness and kurtosis
+library(car) # For Levene's test for homogeneity of variance
+library(coin) #for Wilcoxon test
+library(userfriendlyscience) #This library has a one-way anova function that provides nice summary output
+library(stats) #For statstical functions
+library(FSA) #For running the post-hoc tests
+library(rstatix) #Kruskal wallis effect size
+library(sjstats) #chi-square effect size
+
+
+#Reading data file
+#We are using a .csv file (studentsrenamed.csv) obtained from UCI ML Repository.
+#This data describes student achievement in secondary education of two Portuguese schools. The data attributes include student grades, demographic, social and school related features. Two datasets are merged together from two distinct subjects: Mathematics (columnname.m) and Portuguese language (columnname.p).
+#Getting the current working directory
+getwd()
+
+#Make sure the data file is in the same folder, else qualify the path to the file.
+students <- read.csv("studentsrenamed.csv",fileEncoding="UTF-8-BOM")
+
+#Setting the column names to be that used in the dataset but in lowercase
+colnames(students) <- tolower(colnames(students))
+
+```
+# 1. Introduction
+## 1.1 Background
+
+
+A report is constructed which states the various hypothesis that are being tested.  
+
+* One hypothesis to test for Correlation between different variables. 
+* One hypothesis to test whether two samples are derived from the same population. Or in other words, if two samples are taken from same population, then test whether they have fairly similar means.
+* One hypothesis to test if there is a significant change in samples collected at different point in time.
+* One hypothesis to test when we have more than two levels of measurement on our independent variable. In other owrds, we test whether the groups are different or similar.  
+
+In this report -
+
+* In section 1.2, the variables of interest are analysed and described. These variables are explained in terms of their statistical measurement types and are described with appropriate descriptive statistics and graphs.
+* While deciding on the choice of a statistical test, all the assumptions and conditions have been met.
+* Outcomes of the tests conducted are reported in paragraphs using full sentences using APA style for reporting statistical results.
+* Effect as well as statistical significance, both have been discussed and commented upon.
+* At the end, findings are appropriately interpreted based on the initial hypothesis.  
+
+## 1.2 Dataset description
+
+### INSPECT mG1
+
+**mG1 or Maths Grade At Period 1**  
+It is a scale variable.  
+To inspect any scale variable, we need to perform following steps -
+
+* Generate summary statistics
+* Calculate skewness and kurtosis 
+* Calculate standardised scores
+* Generate a histogram with a normal curve on it
+* Generate a Q-Q plot
+* By reviewing the statistics and plots we can decide whether a variable is parametric or non-parametric
+
+  
+Likewise, mG2, mG3, absences.m are also scale variables, and will be inspected similarly.  
+  
+```{r datadesc1}
+
+#Numerical summary and histograms of mG1 
+
+#stat.desc is a function from pastecs - we include the basic switch=F to ensure we don't get scienfitic notation
+pastecs::stat.desc(students$mg1, basic=F)
+
+#skewness and kurtosis from semTools with standard error
+tpskew<-semTools::skew(students$mg1)
+tpkurt<-semTools::kurtosis(students$mg1)
+
+#We divide the skew statistic by the standard error to get the standardised score
+tpskew[1]/tpskew[2]
+tpkurt[1]/tpkurt[2]
+
+#Create standardised scores and sort
+sort(scale(students$mg1))
+
+```
+#### Inferences :
+
+* Since both, Skew and Kurtosis are not falling in the range of -2 and 2 (rounded up 1.96), we will check for standardized scores.
+* Since, our sample size is more than 80 (it is 382), if 95% of our data falls within +/- 3.29 then we can treat the data as normal
+* Entire data lies between +/- 3.39 in our case, so **it is ok to treat mG1 as Normal**
+
+
+### GRAPH mG1
+We can also check for normal distribution, by looking at histogram and Q-Q plots  
+**QQ plot** 
+It is a plot between Expected and Observed Z-scores. If it is a normal distribution, more and more points will lie on the reference line.   
+
+**Histogram with normal curve**
+Basically it compares the spacing of our data to what we would expect to see in terms of spacing if our data were approximately normal.  
+If our data is approximately normally distributed, only few observations will come in both the tails. More and more observations will come as we  move towards the mean(centre) from the either side.  The spacing is symmetric about the mean.
+
+```{r datadesc1.2}
+#We will allocate the histogram to a variable to allow us to manipulate it
+gg <- ggplot(students, aes(x=students$mg1))
+
+#Change the label of the x axis
+gg <- gg + labs(x="Maths Grade at Period 1")
+#manage binwidth and colours
+gg <- gg + geom_histogram(binwidth=2, colour="black", aes(y=..density.., fill=..count..))
+gg <- gg + scale_fill_gradient("Count", low="#DCDCDC", high="#7C7C7C")
+#adding a normal curve
+#use stat_function to compute a normalised score for each value of tpcois
+#pass the mean and standard deviation
+#use the na.rm parameter to say how missing values are handled
+gg <- gg + stat_function(fun=dnorm, color="red",args=list(mean=mean(students$mg1, na.rm=TRUE), sd=sd(students$mg1, na.rm=TRUE)))
+#to display the graph request the contents of the variable be shown
+gg
+#Create a qqplot
+qqnorm(students$mg1)
+qqline(students$mg1, col=2) #show a line on theplot
+
+```
+#### Inferences from Graphs :
+
+* It appears normal from both histogram and QQ Plot
+
+
+### INSPECT mG2
+**Maths Grades in Period 2 - mG2**
+```{r datadesc2.1}
+
+#numerical summary and histograms of mG2 
+
+#stat.desc is a function from pastecs - we include the basic switch=F to ensure we don't get scienfitic notation
+pastecs::stat.desc(students$mg2, basic=F)
+
+#skewness and kurtosis from semTools with standard error
+tpskew<-semTools::skew(students$mg2)
+tpkurt<-semTools::kurtosis(students$mg2)
+
+#We divide the skew statistic by the standard error to get the standardised score
+tpskew[1]/tpskew[2]
+tpkurt[1]/tpkurt[2]
+
+#Create standardised scores and sort
+sort(scale(students$mg2))
+
+```
+#### Inferences :
+
+* Since both, Skew and Kurtosis are not falling in the range of -2 and 2 (rounded up 1.96), we will check for standardized scores.
+* Since, our sample size is more than 80 (it is 382), if 95% of our data falls within +/- 3.29 then we can treat the data as normal
+* Entire data lies between +/- 3.39 in our case, so **it is ok to treat mG2 as Normal**
+
+
+
+### GRAPH mG2
+
+We can also check for normal distribution, by looking at histogram and Q-Q plots  
+
+**QQ plot** 
+It is a plot between Expected and Observed Z-scores. If it is a normal distribution, more and more points will lie on the reference line.   
+
+**Histogram with normal curve**
+Basically it compares the spacing of our data to what we would expect to see in terms of spacing if our data were approximately normal.  
+If our data is approximately normally distributed, only few observations will come in both the tails. More and more observations will come as we  move towards the mean(centre) from the either side.  The spacing is symmetric about the mean.
+
+
+```{r datadesc2.2}
+#We will allocate the histogram to a variable to allow us to manipulate it
+gg <- ggplot(students, aes(x=students$mg2))
+
+#Change the label of the x axis
+gg <- gg + labs(x="Maths Grade at Period 2")
+#manage binwidth and colours
+gg <- gg + geom_histogram(binwidth=2, colour="black", aes(y=..density.., fill=..count..))
+gg <- gg + scale_fill_gradient("Count", low="#DCDCDC", high="#7C7C7C")
+#adding a normal curve
+#use stat_function to compute a normalised score for each value of tpcois
+#pass the mean and standard deviation
+#use the na.rm parameter to say how missing values are handled
+gg <- gg + stat_function(fun=dnorm, color="red",args=list(mean=mean(students$mg2, na.rm=TRUE), sd=sd(students$mg2, na.rm=TRUE)))
+#to display the graph request the contents of the variable be shown
+gg
+#Create a qqplot
+qqnorm(students$mg2)
+qqline(students$mg2, col=2) #show a line on theplot
+
+```
+#### Inferences from Graphs :
+
+* It appears normal from both histogram and QQ Plot
+
+
+
+### INSPECT mG3
+**Final Maths Grades - mG3**
+```{r datadesc3.1}
+#numerical summary and histograms of mG3 
+
+#stat.desc is a function from pastecs - we include the basic switch=F to ensure we don't get scienfitic notation
+pastecs::stat.desc(students$mg3, basic=F)
+
+#skewness and kurtosis from semTools with standard error
+tpskew<-semTools::skew(students$mg3)
+tpkurt<-semTools::kurtosis(students$mg3)
+
+#We divide the skew statistic by the standard error to get the standardised score
+tpskew[1]/tpskew[2]
+tpkurt[1]/tpkurt[2]
+
+#Create standardised scores and sort
+sort(scale(students$mg3))
+
+```
+#### Inferences :
+
+* Since both, Skew is not falling in the range of -2 and 2 (rounded up 1.96), we will check for standardized scores.
+* Since, our sample size is more than 80 (it is 382), if 95% of our data falls within +/- 3.29 then we can treat the data as normal
+* Entire data lies between +/- 3.39 in our case, so **it is ok to treat mG3 as Normal**
+
+
+### GRAPH mG3
+We can also check for normal distribution, by looking at histogram and Q-Q plots  
+
+**QQ plot** 
+It is a plot between Expected and Observed Z-scores. If it is a normal distribution, more and more points will lie on the reference line.   
+
+**Histogram with normal curve**
+Basically it compares the spacing of our data to what we would expect to see in terms of spacing if our data were approximately normal.  
+If our data is approximately normally distributed, only few observations will come in both the tails. More and more observations will come as we  move towards the mean(centre) from the either side.  The spacing is symmetric about the mean.
+
+```{r datadesc3.2}
+#We will allocate the histogram to a variable to allow us to manipulate it
+gg <- ggplot(students, aes(x=students$mg3))
+
+#Change the label of the x axis
+gg <- gg + labs(x="Final Maths Grade")
+#manage binwidth and colours
+gg <- gg + geom_histogram(binwidth=2, colour="black", aes(y=..density.., fill=..count..))
+gg <- gg + scale_fill_gradient("Count", low="#DCDCDC", high="#7C7C7C")
+#adding a normal curve
+#use stat_function to compute a normalised score for each value of tpcois
+#pass the mean and standard deviation
+#use the na.rm parameter to say how missing values are handled
+gg <- gg + stat_function(fun=dnorm, color="red",args=list(mean=mean(students$mg3, na.rm=TRUE), sd=sd(students$mg3, na.rm=TRUE)))
+#to display the graph request the contents of the variable be shown
+gg
+#Create a qqplot
+qqnorm(students$mg3)
+qqline(students$mg3, col=2) #show a line on theplot
+
+```
+#### Inferences from Graphs :
+
+* It appears normal from both histogram and QQ Plot  
+
+
+### INSPECT absences.m
+**Number of School Absences - absences.m**
+```{r datadesc5.1}
+
+#numerical summary and histograms of absences.m 
+
+#stat.desc is a function from pastecs - we include the basic switch=F to ensure we don't get scienfitic notation
+pastecs::stat.desc(students$absences.m, basic=F)
+
+#skewness and kurtosis from semTools with standard error
+tpskew<-semTools::skew(students$absences.m)
+tpkurt<-semTools::kurtosis(students$absences.m)
+
+#We divide the skew statistic by the standard error to get the standardised score
+tpskew[1]/tpskew[2]
+tpkurt[1]/tpkurt[2]
+
+#Create standardised scores and sort
+sort(scale(students$absences.m))
+
+
+```
+#### Inferences :
+
+* Since both, Skew and Kurtosis are not falling in the range of -2 and 2 (rounded up 1.96), we will check for standardized scores. Skew value is very high (~32), showing a high positive skew, which you can see in below graphs too.
+* Since, our sample size is more than 80 (it is 382), if 95% of our data falls within +/- 3.29 then we can treat the data as normal
+* Entire data lies between +/- 3.39 in our case, so **it is ok to say that absences.m variable is approaching Normality**
+
+
+### GRAPH absence.m
+We can also check for normal distribution, by looking at histogram and Q-Q plots  
+
+**QQ plot** 
+It is a plot between Expected and Observed Z-scores. If it is a normal distribution, more and more points will lie on the reference line.   
+
+**Histogram with normal curve**
+Basically it compares the spacing of our data to what we would expect to see in terms of spacing if our data were approximately normal.  
+If our data is approximately normally distributed, only few observations will come in both the tails. More and more observations will come as we  move towards the mean(centre) from the either side.  The spacing is symmetric about the mean.
+  
+```{r datadesc5.2}
+#We will allocate the histogram to a variable to allow us to manipulate it
+gg <- ggplot(students, aes(x=students$absences.m))
+
+#Change the label of the x axis
+gg <- gg + labs(x="Number of School Absences (Maths)")
+#manage binwidth and colours
+gg <- gg + geom_histogram(binwidth=2, colour="black", aes(y=..density.., fill=..count..))
+gg <- gg + scale_fill_gradient("Count", low="#DCDCDC", high="#7C7C7C")
+#adding a normal curve
+#use stat_function to compute a normalised score for each value of tpcois
+#pass the mean and standard deviation
+#use the na.rm parameter to say how missing values are handled
+gg <- gg + stat_function(fun=dnorm, color="red",args=list(mean=mean(students$absences.m, na.rm=TRUE), sd=sd(students$absences.m, na.rm=TRUE)))
+#to display the graph request the contents of the variable be shown
+gg
+#Create a qqplot
+qqnorm(students$absences.m)
+qqline(students$absences.m, col=2) #show a line on theplot
+
+```
+#### Inferences from Graphs :
+
+* It appears positively skewed from both histogram and QQ Plot
+  
+  
+  
+## 1.3 Hypothesis
+
+> A Hypothesis is always a statement about population parameter.
+
+1. Hypothesis 1 - **Correlation** between Maths Grade at Period 1 and Final Maths Grade  
+    Ho: There is no relationship between mG1 and mG3  
+    Ha: There is a relationship between mG1 and mG3
+  
+2. Hypothesis 2 - **Correlation** between Number of School Absences and Final Maths Grade  
+    Ho: There is no relationship between absences.m and mG3  
+    Ha: There is a relationship between absences.m and mG3
+  
+3. Hypothesis 3 - **Difference** Independent samples t-test for Gender   
+    Ho: Population means are equal for both males and females  
+    Ha: Population means are different
+  
+4. Hypothesis 4 - ANOVA **Difference involving a categorical variable with more than 2 values** for Mother's job  
+    Ho: means of first group is equal second, which is equal to third, fourth and fifth (all means are equal)  
+    Ha: Atleast one mean value is different from other groups
+  
+5. Hypothesis 5 - **Repeated Measures** - Paired Sample t-test on Maths grade in Period one and Period two  
+    Ho: Population means are equal for both mg1 and mg2  
+    Ha: Population means are different
+
+
+
+# 2. Results
+My findings from the various tests, explained in sub-sections for each hypothesis along with separate code chunks for each.  
+
+
+
+## 2.1 Hypothesis 1 - Correlation between Maths Grade at Period 1 and Final Maths Grade 
+
+> **Hypothesis** - Two-tailed hypothesis 
+
+> * Ho: There is no relationship between mG1 and mG3
+> * Ha: There is a relationship between mG1 and mG3
+
+
+
+Correlation Assumptions are as follows :
+
+* **Level of Measurement** - the two variables should be ratio or scaler variables. 
+    + mG1 is Scale variable
+    + mG3 is Scale variable
+* **Related Pairs** - Each variable should hava a value for every case or sample
+    + There are no missing values in mG1
+    + There are no missing values in mG3
+* **Independence of Observations** - Every meansurement is independent or uninfluenced from the other
+    + This data approach student achievement in secondary education of two Portuguese schools.The data attributes include student grades, demographic, social and school related features) and it was collected by using school reports and questionnaires. It is highly likely that every observation is indepentdent.
+* **Normality** - Scores should be normally distributed
+    + mG1 is normally distributed as explained in section 1.2
+    + mG3 is normally distributed as explained in section 1.2
+* **Linearity** - A linear relationship must exist between the two variables. Both Linearity and Homoscedasticity refer to the shape formed by the scatterplot. You should be able to draw a straight line and not a curve through the plots, from left to right. 
+    + Scatter plots of mG1 and mG3 suggest that there exist a linear relationship between them.
+* **Homoscedasticity** - Variability should be similar in both the variables. Homoscedasticity basically referrs to the distance between the points from the straight line drawn through the plot to describe it.
+    + The scatter plot of two variables, mG1 and mG3, suggest that the data points spread like a tube around the straight line, hence there is Homoscedasticity. If there would have been a cone like structure, we would have concluded that Homoscadasticity is not met.
+
+
+> Since, all the above assumptions are meeting, we can run Correlation tests on these two parametric variables - mG1 and mG3.  
+
+
+    
+#### Scatterplot
+
+```{r hypo1.1}
+#Code chunk for hypothesis 1 
+#Simple scatterplot of mG1 and mG3
+#aes(x,y)
+scatter <- ggplot(students, aes(students$mg1, students$mg3))
+scatter + geom_point() + labs(x = "Maths Grade at Period 1", y = "Final Maths Grade") 
+
+#Add a regression line
+scatter + geom_point() + geom_smooth(method = "lm", colour = "Red", se = F) + labs(x = "Maths Grade at Period 1", y = "Final Maths Grade") 
+
+```
+There appears to be a positive correlation.
+As Maths Grade in Period 1 increases, Final Maths Grade increase too. 
+
+
+#### Conducting Correlation Test - Pearson
+
+```{r hypo1.2}
+#Code chunk for hypothesis 2
+#Pearson Correlation
+#We can also use Spearman and kendall's tau tests to test Correlation if required 
+stats::cor.test(students$mg1, students$mg3, method='pearson')
+```
+Understanding the tests output -
+
+* df, degrees of freedom = 380
+* p-value, indicates whether you have a statistically significant result or not < 0.001
+* cor, Pearson's Correlation Coefficient also referred as r while reporting = 0.805
+
+Here r = 0.805 (rounded to three decimal places)  
+Using Cohen's heuristic - Since r is >= +-0.5, there is a strong correlation between mG1 and mG3
+
+
+
+Reporting a Pearson Correlation in words 
+
+> “The relationship between Maths grade at period 1 (mG1 derived from the Student Performance Data Set) and Final maths grade (mG3 derived from the Student Performance Data Set) was investigated using a Pearson correlation.   A strong positive correlation was found (r =.805, n=380, p<.001). A statistically significant p-value (<0.001)  suggests that we have enough evidence to reject the null hypothesis in favor of our alternative hypothesis.”
+
+
+
+
+## 2.2 Hypothesis 2 - Correlation between Number of School Absences and Final Maths Grade
+
+> **Hypothesis** - Two-tailed hypothesis 
+
+> * Ho: There is no relationship between absences.m and mG3
+> * Ha: There is a relationship between absences.m and mG3
+
+
+
+Correlation Assumptions are as follows :
+
+* **Level of Measurement** - the two variables should be ratio or scaler variables. 
+    + absences.m is Scale variable
+    + mG3 is Scale variable
+* **Related Pairs** - Each variable should hava a value for every case or sample
+    + There are no missing values in absences.m
+    + There are no missing values in mG3
+* **Independence of Observations** - Every meansurement is independent or uninfluenced from the other
+    + This data approach student achievement in secondary education of two Portuguese schools.The data attributes include student grades, demographic, social and school related features) and it was collected by using school reports and questionnaires. It is highly likely that every observation is indepentdent.
+* **Normality** - Scores should be normally distributed
+    + absences.m is normally distributed as explained in section 1.2
+    + mG3 is normally distributed as explained in section 1.2
+* **Linearity** - A linear relationship must exist between the two variables. Both Linearity and Homoscedasticity refer to the shape formed by the scatterplot. You should be able to draw a straight line and not a curve through the plots, from left to right. 
+    + Scatter plots of absences.m and mG3 suggest that there exist a linear relationship between them.
+* **Homoscedasticity** - Variability should be similar in both the variables. Homoscedasticity basically referrs to the distance between the points from the straight line drawn through the plot to describe it.
+    + The scatter plot of two variables, absences.m and mG3, suggest that the data points spread like a tube around the straight line, hence there is Homoscedasticity. If there would have been a cone like structure, we would have concluded that Homoscadasticity is not met.
+
+
+> Since, all the above assumptions are met, we can run Correlation tests on our two parametric variables - absences.m and mG3.
+
+    
+#### Scatterplot
+
+```{r hypo2.1}
+#Code chunk for hypothesis 2
+#Simple scatterplot of mG1 and mG3
+#aes(x,y)
+scatter <- ggplot(students, aes(students$mg3,students$absences.m))
+scatter + geom_point() + labs(x = "Final Maths Grade", y = "Number of School Absences") 
+
+#Add a regression line
+scatter + geom_point() + geom_smooth(method = "lm", colour = "Red", se = F) + labs(x = "Number of School Absences", y = "Final Maths Grade") 
+```
+
+There appears to be no correlation between Number of School Absences and Final Maths Grade.
+
+
+#### Conducting Correlation Test - Pearson
+
+```{r hypo2.2}
+#Code chunk for hypothesis 2
+#Pearson Correlation
+#We can also use Spearman and kendall's tau tests to test Correlation if required 
+stats::cor.test(students$absences.m, students$mg3, method='pearson')
+```
+
+Understanding the tests output -
+
+* df, degrees of freedom = 380
+* p-value, indicates whether you have a statistically significant result or not = 0.572
+* cor, Pearson's Correlation Coefficient also referred as r while reporting = 0.029
+
+Here r = 0.029 (rounded to three decimal places)
+Using Cohen's heuristic - Since r is between +-0.1, there is very weak or no correlation between absences.m and mG3.
+
+
+
+Reporting a Pearson Correlation in words
+
+> “The relationship between Number of School Absences (absences.m derived from the Student Performance Data Set) and Final maths grade (mG3 derived from the Student Performance Data Set) was investigated using a Pearson correlation. A very weak or no correlation was found (r = 0.029, n=380, p>0.05). A statistically non-significant p-value (>0.05)  suggests that we don't have enough evidence to reject the null hypothesis in favor of our alternative hypothesis.”
+
+
+
+
+## 2.3 Hypothesis 3 - Independent samples t-test between  
+  
+> Hypothesis – It is always a statement about population parameter.
+
+> * Ho: Population means are equal
+> * Ha: Population means are different
+
+> So this is again a two-tail test as we are only proving whether two mean are different. It would have been a one-tail test if we either proved that mean of one population is greater or smaller than the other.
+
+
+There are two **assumptions** of t-tests, and they are as follows -
+
+* Assumption of normality (t-test is a parametric test)
+    + Data should be interval or scale. 
+    + It should be normally distributed. As per section 1.2 inspection of absences.m variable is approaching normmality, and hence can be treated as parametric. 
+* Assumption of Homogeneity of variance. In other words, Variances in two populations are roughly equal.
+    + If the samples in each group are large and nearly equal, the t-test can still be conducted even though assumptions are not met. Sex has two groups - male and female. Levene Test is showing that there is a homogeneity of variance.  
+
+
+We will be conducting the **independent t-test**, as these assumptions have been met and also because the observations are independent of each other. Grades of different students are measured in different or independent conditions.
+
+
+### Differences - Parametric Tests
+
+#### Inspecting Categorical Variable - sex (gender of student)
+```{r hypo3.1}
+#Code chunk for hypothesis 3
+
+#Get descriptive stastitics by group
+#describeBy is part of the psych package so you need to use it
+psych::describeBy(students$absences.m,group=students$sex)
+
+```
+
+#### Levene test 
+Choosing Levene Test because its a very robust test for normally distributed data, it can handle slight deviations from normality. And absence.m variable is approaching normality, even though it's bit positively skewed.
+
+``` {r hypo3.2}
+#Conduct Levene's test for homogeneity of variance in library car
+
+car::leveneTest(absences.m~sex, data=students)
+```
+Leven's test output: 
+
+* F-statistic = 2.555 
+* significance value, or p-value = 0.111 (>0.05)
+
+Test is coming non-significant so we can assume *homogeneity of variance*. Or that, variance of two groups is similar.
+
+
+#### Independent t-test
+```{r hypo3.3}
+#Conduct the t-test
+#var=True specifies equal variances
+t.test(absences.m~sex,var.equal=TRUE, data=students)
+#We get a statistically insignificant result
+
+```
+
+Understanding the t-test's output -
+
+* df, degrees of freedom = 380
+* p-value, indicates whether you have a statistically significant result or not = 0.213 (>0.05)
+* mean values = mean of Male and Female populatoions are almost similar
+
+#### Effect - size 
+It is the magnitude of difference between the means of your groups.
+
+* It ranges from 0 to 1
+* t=t-statistics, N1=Number in group 1, N2 = number in group 2
+
+
+```{r hypo3.4}
+#Calculate the effect-size or eta-squared
+#t-statistics
+t = 1.247
+#no. of females
+N1 = 198
+#no. of males
+N2 = 184
+#eta square formula
+eta_squared = (t^2) /(t^2 + (N1 + N2 -2))
+eta_squared
+
+```
+Understanding Eta squared test's output -
+
+* Guidelines on effect size: 0.01 = small, 0.06 = moderate, 0.14 =large
+* 0.004 is small effect-size
+
+
+
+Reporting a t-test in words:
+
+> An independent-samples t-test was conducted to compare absence records for male and female students. No significant difference in the absence records was found (M=5.79, SD= 9.16 for female stuudents, M= 4.82, SD= 5.5 for male students), (t(380)= 1.247, p = 0.213). The eta square statistic also indicated a very small effect size (0.004). A statistically non-significant p-value (>0.05)  suggests that we don't have enough evidence to reject the null hypothesis in favor of our alternative hypothesis. This suggest that the mean of two populations is almost same. 
+
+
+## 2.4 Hypothesis 4 - ANOVA
+  
+> Hypothesis – It is always a statement about population parameter.
+
+> * Ho: means of first group is equal second, which is equal to third, fourth and fifth (all means are equal)
+> * Ha: Atleast one mean value is different from other groups
+
+
+There are two main **assumptions** of anova test, and they are similar to t-test -
+
+* Assumption of normality
+    + Data should be interval or scale. 
+    + It should be normally distributed. As per section 1.2 inspection of mG3 variable, the distribution is normmal, and hence can be treated as parametric. 
+* Assumption of Homogeneity of variance. In other words, Variances in group populations are roughly equal.
+    + If the samples in each group are large and nearly equal, the t-test can still be conducted even though assumptions are not met. Mjob has five groups - at_home, health, other, services, and teacher. Bartlett Test is showing that there is a homogeneity of variance (see below)
+
+
+Conditions needed - 
+
+* One independent variable with three or more levels (mother's job, a categorical variable) (mjob)
+* One continuous variable (Final Maths Grades) (mG3)
+
+> We will thus be conducting the **One-way Between-Groups ANOVA** test, as above assumptions as well as the conditions have been met. 
+We undertake **ANOVA** when we have more than two levels of measurement on our independent variable.
+Also please note that, the observations are independent of each other as Grades of different students are measured in different or independent conditions.
+
+
+
+*** 
+**Please Note this**  
+Why we don’t take individual t-tests (pair wise independent sample t-tests) to find the difference in these groups?  
+Answer is, the probability of committing a type-1 error rises to significantly.
+
+***
+  
+
+### Question: Is there a difference in final maths scores of students with different jobs of mother?
+#### Inspecting mjob categorical variable -
+```{r hypo4.1}
+#Code chunk for hypothesis 4
+#Summary statistics by group (we know we can use mean and sd but you can adjust to calculate median and IQR)
+group_by(students, students$mjob) %>% 
+dplyr::summarise( 
+count = n(), 
+mean = mean(mg3, na.rm = TRUE), 
+sd = sd(mg3, na.rm = TRUE) )
+```
+Here, we are getting count, mean and standard deviations of individual groups.
+
+#### Homogeneity of Variance
+```{r hypo4.2 }
+
+#Check for homogeneity of variance
+#We use Bartlett's test 
+
+stats::bartlett.test(students$mg3, students$mjob)
+#Can be argued that the variances are homogeneous if the p-value > 0.05
+
+```
+Understanding Bartlett test's output -
+
+* p-value = 0.886 (>0.05), hence non-significant 
+* df, degree of freedom = 4
+
+A non-significant test suggests that there is a **Homogeneity of variance** between the groups.
+
+
+#### ANOVA test 
+ANOVA tests for one overall effect only (this makes it an *omnibus* test), it can tell us if there is difference between groups but it doesn’t provide information about which specific groups were affected.   Now, to identify which group is different – we follow this test with a *post hoc* test, it finds out which pairing of the groups have contributed this particular significance.
+
+``` {r hypo4.3}
+
+#run User friendly science one-way anova test using the correct post-hoc test Tukey in our case
+#Use Games-Howell for unequal variances
+one.way <- userfriendlyscience::oneway(students$mjob, y = students$mg3, posthoc = 'Tukey') 
+ 
+#printout a summary of the anova 
+one.way 
+
+```
+Understanding the **ANOVA** test output -
+
+* p-value is significant >0.005
+* There is a statistically significant difference, but between which groups? This can be answered by TukeyHSD test.
+* sum of squares between groups = 364.52
+* total sum of squares = 8006.14 
+
+  
+Understanding the **Tukey** test output -
+
+* Final maths grade of students with their mother's job as *health* and *at_home* are *significantly* different.
+* Only signifcant difference is between our at_home mjob group and health mjob group and the magnitude is 3.21
+  
+  
+#### Calculating the effect size
+```{r hypo 4.4}
+#eta_squared = sum of squares between groups/total sum of squares (from our ANOVA output (rounded up))
+eta_squared=365/8006
+eta_squared
+
+
+```
+Understanding the **eta_squared** value -
+
+* Guidelines on effect size: 0.01 = small, 0.06 = moderate, 0.14 =large
+* Effect-size is 0.04 (very small)
+
+  
+**Reporting the ANOVA result** 
+
+> A one-way between-groups analysis of variance was conducted to explore the impact of mother's job on final maths grades. Participants were divided into five groups according to mother's job (Group 1: at_home; Group 2: health; Group 3: services; Group 4: teacher; Group 5: other). There was a statistically significant difference at the p < .05 level in final math scores for the five mother's job groups: F(4, 377)=4.3, p<0.05. Despite reaching statistical significance, the actual difference in mean final maths grades between most of the groups was quite small. The effect size, calculated using eta squared was .04. Post-hoc comparisons using the Tukey HSD test indicated that the mean score for at_home mother's job group (M=8.85, SD=4.88) was statistically different to health mother's job group(M=12.06, SD=4.26). Rest of the mother's job groups did not differ significantly from any other group.
+
+  
+  
+  
+
+## 2.5 Hypothesis 5 - Repeated Measures - Paired Sample t-test 
+  
+Repeated Measures basically implies that, data has been collected from same group at two different conditions or occasions.
+  
+  
+> Hypothesis – It is always a statement about population parameter.
+
+> * Ho: Population means are equal
+> * Ha: Population means are different
+
+
+These are the **assumptions** of t-tests -
+
+* Assumption of normality (it is a parametric test)
+    + Data should be interval or scale. 
+    + It should be normally distributed. As per section 1.2 inspection of mG1 variable an mG2 variable  shows that they both are normally distributed, and hence are both parametric. 
+* Assumption of Homogeneity of variance. In other words, Variances in two populations are roughly equal.
+    + If the samples in each group are large and nearly equal, the t-test can still be conducted even though assumptions are not met. Sex has two groups - male and female. Levene Test is showing that there is a homogeneity of variance.  
+
+
+Conditions needed for Paired sample t-test - 
+
+* One categorical independent variable, which in this case is Time with two different levels (Period 1 and Period 2)
+* One continuous dependent variable (Maths Grades) measured on two different occasions or under different conditions (mG1 and mG2)
+  
+  
+> We will be conducting the **paired sample t-test**, as these assumptions and conditions have been met. Paired sample t-test will tell us whether there is a statistically significant difference between the mean maths grades for Time 1 and Time 2.
+  
+  
+#### Question: Is there a significant change in student’s Maths Grades from Period 1 tp Period 2?
+
+```{r hypo5.1}
+#Code chunk for hypothesis 5
+
+#Paired T-test
+#mG1 and mG2 should both be numeric
+t.test(students$mg1,students$mg2,paired = TRUE) 
+#This shows there is no significant difference in the means in the grades for mg1 and mg2 
+
+```
+understanding the output -
+
+* t = 1.49, 
+* df =381, 
+* p-value (>0.05) 
+* sample estimates: mean of the differences 0.149
+* We have established a non-significant difference to the level of 0.15 (rounded)
+  
+  
+#### Calculating an Effect Size
+```{r hypo5.2}
+#t-statastics
+t = 1.49
+#no of observations
+N = 382
+#eta squared = 𝑡2/(𝑡2+(𝑁−1))
+eta_squared = (t^2)/(t^2 +(N-1))
+eta_squared
+
+
+```
+Understanding eta square output
+
+* eta squared value = 0.006 (rounded)
+* Cohen’s guidelines : .01 = small, .06 = moderate, .014=large
+* very small difference of 0.006
+
+
+
+**Reporting the paired t-test**  
+
+> A paired-samples t-test was conducted to evaluate the difference in students’ maths grades in period 1 and period 2 (mg1 and mg2). There was no statistically significant change in maths grade scores from Time 1 (M=10.86, SD=3.35) to Time 2 (M=10.71, SD=3.83), t (381)=1.49, p<.05). The mean decrease in maths grades was 0.15 with a 95% confidence interval ranging from -0.04 to 0.35. The eta squared statistic (.006) indicated a very small effect size.
+
+# 3. Discussion
+
+
+Key findings in this report are :  
+
+* There is a very strong correlation between Maths Grade at Period 1 and Final Maths Grade
+
+* There is no correlation between Number of School Absences and Final Maths Grade
+
+* Number of absences for both boys and girls are similar.  
+
+* Students whose mothers work in health sector and students whose mother does not work and stays at home have significant difference between them in their final maths grades.   
+
+* Students whose mothers work as a teacher, in services or in some other sectors have identical performances in their final math grades.
+
+* Maths grades in Period 1 an Period 2 are very much similar.  
+
+***
+While building a Predictive model to predict Final Maths Grades (mG3) there are a few things which can be kept in mind, based on the analysis explained in this report -
+
+    * Maths grade in Period 1 (mG1) can be used as a preditor (or inependent variable) as it shows a strong correlation with Final grades (mG3).  
+    
+    * On similar lines, absences should not be used in predicting final grades.  
+    
+    * Maths grades in period 1 and period 2 are similar variables as have come out in paired sample t-test. So either one can be used, however, it will thus be futile to use both of them together.
+    
+
+# References
+P. Cortez and A. Silva (2008). Using Data Mining to Predict Secondary School Student Performance. In A. Brito and J.Teixeira Eds., *Proceedings of 5th FUture BUsiness TEChnology Conference* (FUBUTEC 2008) pp. 5-12, Porto, Portugal, April, 2008, EUROSIS, ISBN 978-9077381-39-7.
+
+
